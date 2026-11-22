@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noai, noimageai">
+<meta name="color-scheme" content="light dark">
+<title>Ribbens — Quotes</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='29' font-family='Helvetica,Arial' font-weight='700' font-size='30' fill='%23fff' text-anchor='middle'%3E%E2%80%9C%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --ink: #000;
+    --paper: #fff;
+    --grey: #767676;
+    --soft-grey: #a3a3a3;
+    --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --pad: clamp(1.25rem, 3.5vw, 3rem);
+    --ease-out: cubic-bezier(.16, 1, .3, 1);
+    /* Movement: one long, smooth ease-in-out. No overshoot, no bounce. */
+    --glide: cubic-bezier(.65, 0, .35, 1);
+    --soft: cubic-bezier(.45, 0, .25, 1);    /* blur, fade and the blur veils */
+    --dur: 1.25s;
+    --fade: 1s;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #f5f5f5; --paper: #0a0a0a; --grey: #8a8a8a; --soft-grey: #6e6e6e; }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { background: var(--paper); color: var(--ink); }
+  body { height: 100dvh; display: grid; grid-template-rows: auto 1fr auto; font-family: var(--font); -webkit-font-smoothing: antialiased; overflow: hidden; }
+  ::selection { background: var(--ink); color: var(--paper); }
+
+  /* Header (same as the basic site) */
+  /* Wordmark: bold Helvetica */
+  .mark { font-family: var(--font); font-weight: 700; font-size: 1.375rem; letter-spacing: -.035em; line-height: 1.15; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 var(--pad); height: 3.75rem; border-bottom: 1px solid var(--ink); }
+  #count { font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+
+  /* ── The drum ─────────────────────────────────────────────
+     Every slot sits on the vertical centre line of the stage. JS gives each one
+     its offset from the centre (-3 … +3); the transform, blur and opacity for that
+     offset are computed in JS and eased by CSS transitions, so a move is just
+     "every slot gets a new offset". */
+  .stage {
+    position: relative; overflow: hidden;
+    background: var(--paper);   /* the blur veils need an opaque backdrop, otherwise their layers stack the text darker */
+    perspective: 900px; perspective-origin: var(--pad) 50%;   /* vanishing point on the text's left edge keeps every quote left-aligned */
+    touch-action: none; user-select: none; -webkit-user-select: none;
+    -webkit-mask-image: linear-gradient(transparent, #000 9%, #000 91%, transparent);
+            mask-image: linear-gradient(transparent, #000 9%, #000 91%, transparent);
+  }
+  .track { position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none; transition: transform .5s var(--ease-out); }
+  .track.dragging { transition: none; }
+
+  .slot {
+    position: absolute; top: 50%; left: var(--pad); right: var(--pad);
+    transform-origin: 0 50%;
+    transition: transform var(--dur) var(--glide), --op var(--fade) var(--soft), filter var(--fade) var(--soft);
+    will-change: transform, opacity, filter;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .slot.jump { transition: none; }
+  /* Fade via text colour, not opacity: Chrome ignores opacity on 3D content that
+     sits under a backdrop-filter, which made the neighbours render solid black. */
+  @property --op { syntax: "<number>"; inherits: true; initial-value: 1; }
+  .q { color: color-mix(in srgb, var(--ink) calc(var(--op) * 100%), transparent); }
+  .by { color: color-mix(in srgb, var(--grey) calc(var(--op) * 100%), transparent) !important; }
+  .slot[data-o="0"] { cursor: default; }
+
+  /* Progressive blur: two veils that start right at the top and bottom edge of the
+     centre quote and blur harder the further out you go. Four stacked layers, each
+     a stronger blur faded in a bit further from the quote. */
+  .veil { position: absolute; left: 0; right: 0; pointer-events: none; z-index: 2;
+          transition: height var(--fade) var(--soft); }
+  .veil.top { top: 0; height: var(--veil-top, 30%); }
+  .veil.bot { bottom: 0; height: var(--veil-bot, 30%); }
+  .veil i { position: absolute; inset: 0; }
+  .veil i:nth-child(1) { backdrop-filter: blur(1.5px); -webkit-backdrop-filter: blur(1.5px); --a: 0%;  --b: 18%; }
+  .veil i:nth-child(2) { backdrop-filter: blur(3px);   -webkit-backdrop-filter: blur(3px);   --a: 10%; --b: 38%; }
+  .veil i:nth-child(3) { backdrop-filter: blur(6px);   -webkit-backdrop-filter: blur(6px);   --a: 28%; --b: 62%; }
+  .veil i:nth-child(4) { backdrop-filter: blur(12px);  -webkit-backdrop-filter: blur(12px);  --a: 50%; --b: 90%; }
+  .veil.top i { -webkit-mask-image: linear-gradient(to top, transparent var(--a), #000 var(--b)); mask-image: linear-gradient(to top, transparent var(--a), #000 var(--b)); }
+  .veil.bot i { -webkit-mask-image: linear-gradient(to bottom, transparent var(--a), #000 var(--b)); mask-image: linear-gradient(to bottom, transparent var(--a), #000 var(--b)); }
+
+  /* Phones: the quote block is centred on screen, the text inside stays left-aligned. */
+  @media (max-width: 40rem) {
+    .stage { perspective-origin: 50% 50%; }
+    .slot { transform-origin: 50% 50%; }
+    .in { margin-inline: auto; }
+  }
+
+  .q {
+    font-weight: 700; letter-spacing: -.04em; line-height: 1;
+    text-wrap: balance;
+    font-size: calc(var(--k) * var(--u) * var(--fit, 1));
+    max-width: var(--ch);
+  }
+  .slot { --u: min(1vw, 1.55vh); }
+  @media (max-width: 40rem) { .slot { --u: min(2.15vw, 1.35vh); } }
+  .slot[data-size="s"]   { --k: 7.6; --ch: 16ch; }
+  .slot[data-size="m"]   { --k: 6.2; --ch: 20ch; }
+  .slot[data-size="l"]   { --k: 4.7; --ch: 25ch; }
+  .slot[data-size="xl"]  { --k: 3.7; --ch: 30ch; }
+  .slot[data-size="xxl"] { --k: 3.0; --ch: 36ch; }
+  .slot[data-size="l"] .q, .slot[data-size="xl"] .q, .slot[data-size="xxl"] .q { letter-spacing: -.03em; line-height: 1.06; }
+
+  .by { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .6rem; margin-top: clamp(.9rem, 2.2vh, 1.6rem); font-size: .875rem; letter-spacing: .02em; color: var(--grey); }
+  .by:empty { display: none; }
+  .by .note { font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; }
+  .by .note::before { content: "·"; margin-right: .6rem; }
+
+  /* Controls (same bar as the basic site, arrows turned vertical) */
+  .bar { display: flex; border-top: 1px solid var(--ink); }
+  button.b {
+    font: inherit; font-size: .9375rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    cursor: pointer; border: 0; border-radius: 0; height: 4.5rem;
+    padding: 0 clamp(1.5rem, 4vw, 3.5rem); display: inline-flex; align-items: center; gap: 1rem;
+    background: var(--paper); color: var(--ink); box-shadow: inset -1px 0 0 var(--ink);
+    transition: background-color .15s, color .15s;
+  }
+  button.b:focus-visible { outline: 3px solid var(--ink); outline-offset: -8px; }
+  button.b:hover { background: var(--ink); color: var(--paper); }
+  .arrow { display: inline-block; font-size: 1.4em; line-height: 1; letter-spacing: 0; transition: transform .25s var(--ease-out); }
+  .prev { width: 4.5rem; padding: 0; justify-content: center; }
+  .prev:hover .arrow { transform: translateY(-.25rem); }
+  button.next { background: var(--ink); color: var(--paper); min-width: min(18rem, 50vw); justify-content: space-between; }
+  button.next:hover { background: var(--paper); color: var(--ink); }
+  .next:hover .arrow { transform: translateY(.25rem); }
+  .copy { min-width: 9rem; justify-content: center; }
+  @media (max-width: 40rem) {
+    button.next { flex: 1; min-width: 0; }
+    button.b { height: 4rem; }
+    .prev { width: 4rem; }
+    button.copy { min-width: 0; padding: 0 1.25rem; box-shadow: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :root { --dur: .3s; }
+  }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="mark">Ribbens</span>
+    <span id="count"></span>
+  </header>
+
+  <main class="stage" id="stage" aria-roledescription="carousel" aria-label="Quotes">
+    <div class="track" id="track"></div>
+    <div class="veil top" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <div class="veil bot" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  </main>
+
+  <p class="sr" id="sr" aria-live="polite"></p>
+
+  <div class="bar">
+    <button class="b prev" id="prev" type="button" aria-label="Previous quote"><span class="arrow" aria-hidden="true">↑</span></button>
+    <button class="b next" id="next" type="button"><span>Next</span><span class="arrow" aria-hidden="true">↓</span></button>
+    <button class="b copy" id="copy" type="button">Copy</button>
+  </div>
+
+<script src="quotes.js"></script>  <!-- the quotes, scrambled; generated from the .md by tools/build_quotes.py -->
+<script>
+// Unscramble the quotes (quotes.js swaps every printable character for another one).
+const DATA = (() => {
+  const back = new Map([...PACKED.k].map((c, i) => [c, String.fromCharCode(32 + i)]));
+  const un = s => Array.from(s, c => back.get(c) ?? c).join('');
+  return { q: PACKED.q.map(un), by: PACKED.by.map(un) };
+})();
+const QUOTES = DATA.q, AUTHORS = DATA.by, N = QUOTES.length;
+const $ = id => document.getElementById(id);
+const stage = $('stage'), track = $('track'), countEl = $('count'), copyBtn = $('copy'), sr = $('sr');
+const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+
+// ── Order ─────────────────────────────────────────────────
+// One shuffled pass through every quote. The list is a ring, so it wraps at both
+// ends: after the last quote comes the first, before the first comes the last.
+const order = QUOTES.map((_, i) => i);
+for (let i = N - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+const mod = (a, n) => ((a % n) + n) % n;
+const quoteAt = p => order[mod(p, N)];
+
+const fromHash = parseInt(location.hash.slice(1), 10);
+let pos = 0;
+if (fromHash >= 1 && fromHash <= N) pos = order.indexOf(fromHash - 1);
+
+// ── Slots ─────────────────────────────────────────────────
+// Only 7 elements exist, whatever the size of the collection: offsets -3 … +3.
+// Offset ±3 is always invisible, so that is where a slot gets new content.
+const R = 3, SLOTS = 2 * R + 1;
+const slots = Array.from({ length: SLOTS }, () => {
+  const el = document.createElement('article');
+  el.className = 'slot jump';
+  el.innerHTML = '<div class="in"><blockquote class="q"></blockquote><p class="by"></p></div>';
+  el.addEventListener('click', () => {
+    if (dragMoved) return;
+    const o = +el.dataset.o;
+    if (o === 0) { if (!getSelection().toString()) go(1); } else go(o);   // centre click: next quote, the whole drum rolls one position down
+  });
+  track.append(el);
+  return el;
+});
+const slotAt = p => slots[mod(p, SLOTS)];
+
+function authorParts(a) { const m = a.match(/^(.*?)\s*\(([^)]*)\)$/); return m ? [m[1], m[2]] : [a, '']; }
+
+function fill(el, i) {
+  const text = QUOTES[i], n = text.length;
+  el.dataset.idx = i;
+  el.dataset.size = n <= 40 ? 's' : n <= 85 ? 'm' : n <= 140 ? 'l' : n <= 220 ? 'xl' : 'xxl';
+  el.querySelector('.q').textContent = text;
+  const by = el.querySelector('.by');
+  by.replaceChildren();
+  if (AUTHORS[i]) {
+    const [name, note] = authorParts(AUTHORS[i]);
+    const a = document.createElement('span'); a.textContent = '— ' + name; by.append(a);
+    if (note) { const b = document.createElement('span'); b.className = 'note'; b.textContent = note; by.append(b); }
+  }
+  fit(el);
+}
+
+// Never let the centre quote take more than ~52% of the stage height: long
+// quotes get a smaller font instead of pushing their neighbours off the stage.
+function fit(el) {
+  const inner = el.querySelector('.in'), saved = el.style.transform;
+  el.style.transform = 'none';                // measure untransformed (slot is in .jump, so nothing animates)
+  inner.style.width = '';
+  el.style.setProperty('--fit', 1);
+  const max = stage.clientHeight * 0.52, h = el.offsetHeight;
+  if (h > max) el.style.setProperty('--fit', Math.max(.55, max / h * .97));
+  // A single long word ("disappointments.") must never run off the screen: if the
+  // text is wider than the slot, shrink it until the longest word fits.
+  const q = el.querySelector('.q'), room = el.clientWidth, x0 = el.getBoundingClientRect().left;
+  const rg = document.createRange(); rg.selectNodeContents(q);
+  let right = 0; for (const b of rg.getClientRects()) right = Math.max(right, b.right - x0);
+  if (right > room) el.style.setProperty('--fit', (+el.style.getPropertyValue('--fit') || 1) * room / right * .97);
+  if (narrow.matches) {
+    // shrink the block to its longest line so it can be centred as a whole
+    const r = document.createRange(); r.selectNodeContents(el.querySelector('.q'));
+    const left = inner.getBoundingClientRect().left;
+    let w = 0; for (const b of r.getClientRects()) w = Math.max(w, b.right - left);
+    // the author line is a full-width flex row, so measure its actual pieces, not the row
+    for (const b of el.querySelectorAll('.by > span')) w = Math.max(w, b.getBoundingClientRect().right - left);
+    inner.style.width = Math.ceil(w + 1) + 'px';
+  }
+  el._h = el.offsetHeight;
+  el.style.transform = saved;
+}
+
+// ── Geometry per offset ───────────────────────────────────
+// a = apparent scale on screen, rot = tilt away from the viewer, z = depth.
+// Depth shrinks things through perspective, so translateY and scale are
+// corrected to land exactly at the apparent position/size we want.
+const LOOK = [
+  { a: 1,   rot: 0,  z: 0,    blur: 0,   op: 1   },
+  { a: .42, rot: 38, z: -200, blur: 7,   op: .38 },
+  { a: .26, rot: 62, z: -380, blur: 12,  op: 0   },
+  { a: .18, rot: 76, z: -480, blur: 16,  op: 0   },
+];
+const P = 900;
+const narrow = matchMedia('(max-width: 40rem)');
+const cos = d => Math.cos(d * Math.PI / 180);
+
+function layout() {
+  const H = stage.clientHeight, gap = Math.max(18, H * .05);
+  // apparent centre Y of each offset, built outward from the centre quote
+  const y = { 0: 0 };
+  for (const dir of [1, -1]) {
+    let edge = slotAt(pos)._h / 2;                       // edge of the centre quote
+    for (let k = 1; k <= R; k++) {
+      const h = slotAt(pos + dir * k)._h * (narrow.matches && k === 1 ? .55 : LOOK[k].a) * cos(LOOK[k].rot);
+      y[dir * k] = dir * (edge + gap + h / 2);
+      edge += gap + h;
+    }
+  }
+  for (let o = -R; o <= R; o++) {
+    const el = slotAt(pos + o), L = LOOK[Math.abs(o)], f = (P - L.z) / P;
+    const a = narrow.matches && Math.abs(o) === 1 ? .55 : L.a;   // bigger neighbours on phones
+    el.dataset.o = o;
+    el.style.transform =
+      // logical offset +1 (the next quote) is drawn ABOVE the centre: forward = everything moves top to bottom
+      `translate3d(0, calc(-50% + ${(-y[o] * f).toFixed(1)}px), ${L.z}px) rotateX(${Math.sign(o) * L.rot}deg) scale(${(a * f).toFixed(4)})`;
+    el.style.setProperty('--op', L.op);
+    el.style.filter = L.blur && !reduced.matches ? `blur(${L.blur}px)` : 'none';
+    el.setAttribute('aria-hidden', o !== 0);
+    el.style.pointerEvents = Math.abs(o) <= 1 ? 'auto' : 'none';
+  }
+  // veils end exactly at the centre quote's top and bottom edge
+  const edge = Math.max(0, H / 2 - slotAt(pos)._h / 2 - 6);
+  stage.style.setProperty('--veil-top', edge + 'px');
+  stage.style.setProperty('--veil-bot', edge + 'px');
+  const cur = quoteAt(pos);
+  countEl.textContent = `No. ${(cur + 1).toLocaleString('en')}`;
+  try { history.replaceState(null, '', '#' + (cur + 1)); } catch {}
+}
+
+// Put the right quote in every slot. A slot that changes quote is invisible
+// (offset ±3) or new, so it is placed without a transition.
+function sync() {
+  const fresh = [];
+  for (let o = -R; o <= R; o++) {
+    const el = slotAt(pos + o), i = quoteAt(pos + o);
+    if (+el.dataset.idx !== i || el.dataset.idx === undefined) { el.classList.add('jump'); fill(el, i); fresh.push(el); }
+  }
+  return fresh;
+}
+
+function go(step) {
+  if (!step) return;
+  pos += step;
+  const fresh = sync();
+  if (fresh.length) {
+    // place new slots at their far-off start position first, then animate everything
+    layout();
+    fresh.forEach(el => el.offsetWidth);
+    fresh.forEach(el => el.classList.remove('jump'));
+  }
+  layout();
+  copyBtn.textContent = 'Copy';
+  // tell screen readers which quote is now in the centre
+  const i = quoteAt(pos), a = AUTHORS[i];
+  sr.textContent = QUOTES[i] + (a ? ' — ' + authorParts(a)[0] : '');
+}
+
+// ── Input ─────────────────────────────────────────────────
+$('next').addEventListener('click', () => go(1));
+$('prev').addEventListener('click', () => go(-1));
+copyBtn.addEventListener('click', async () => {
+  const i = quoteAt(pos), a = AUTHORS[i];
+  try {
+    await navigator.clipboard.writeText(QUOTES[i] + (a ? ' — ' + authorParts(a)[0] : ''));
+    copyBtn.textContent = 'Copied';
+    sr.textContent = 'Copied to clipboard';
+    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1400);
+  } catch { copyBtn.textContent = 'Failed'; }
+});
+
+addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest('button') && (e.code === 'Space' || e.key === 'Enter')) return;
+  if (['ArrowDown', 'ArrowRight', 'PageDown', 'Enter'].includes(e.key) || e.code === 'Space') { e.preventDefault(); go(1); }
+  else if (['ArrowUp', 'ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); go(-1); }
+  else if (e.key === 'c' || e.key === 'C') copyBtn.click();
+});
+
+// Mouse wheel / trackpad: one quote per gesture, not one per wheel event.
+let wheelSum = 0, wheelLock = 0;
+stage.addEventListener('wheel', e => {
+  e.preventDefault();
+  const now = performance.now();
+  if (now < wheelLock) return;
+  wheelSum += e.deltaY;
+  if (Math.abs(wheelSum) > 40) { go(Math.sign(wheelSum)); wheelSum = 0; wheelLock = now + 600; }
+}, { passive: false });
+
+// Drag / swipe: the whole drum follows the finger, then settles on release.
+let startY = 0, dragY = 0, dragging = false, dragMoved = false;
+stage.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  dragging = true; dragMoved = false; startY = e.clientY; dragY = 0;
+  track.classList.add('dragging');
+});
+addEventListener('pointermove', e => {
+  if (!dragging) return;
+  dragY = e.clientY - startY;
+  if (Math.abs(dragY) > 6) dragMoved = true;
+  // rubber band: follows 1:1 at first, then resists
+  const d = Math.sign(dragY) * Math.min(Math.abs(dragY), 40 + Math.abs(dragY) * .35);
+  track.style.transform = `translateY(${d}px)`;
+});
+addEventListener('pointerup', endDrag);
+addEventListener('pointercancel', endDrag);
+function endDrag() {
+  if (!dragging) return;
+  dragging = false;
+  track.classList.remove('dragging');
+  track.style.transform = '';
+  const H = stage.clientHeight;
+  if (Math.abs(dragY) > Math.min(60, H * .08)) {
+    // drag down = the next quote (above) comes down into the centre
+    const steps = Math.max(1, Math.min(3, Math.round(Math.abs(dragY) / (H * .25))));
+    go(dragY > 0 ? steps : -steps);
+  }
+  setTimeout(() => { dragMoved = false; }, 0);
+}
+
+// Re-fit on resize (orientation change, window resize)
+let rT;
+addEventListener('resize', () => {
+  clearTimeout(rT);
+  rT = setTimeout(() => {
+    slots.forEach(el => el.classList.add('jump'));
+    slots.forEach(fit);
+    layout();
+    requestAnimationFrame(() => slots.forEach(el => el.classList.remove('jump')));
+  }, 120);
+});
+
+// ── Start ─────────────────────────────────────────────────
+document.fonts.ready.then(() => {
+  sync();
+  // Entrance: the drum rolls in from one position below.
+  pos -= 1; layout(); pos += 1;
+  slots.forEach(el => el.offsetWidth);
+  requestAnimationFrame(() => {
+    slots.forEach(el => el.classList.remove('jump'));
+    sync();
+    layout();
+  });
+});
+</script>
+</body>
+</html>
