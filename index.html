@@ -266,7 +266,12 @@ const P = 900;
 const narrow = matchMedia('(max-width: 40rem)');
 const cos = d => Math.cos(d * Math.PI / 180);
 
+// Interpolate a per-offset table (indexed by |x|) and a signed position table at fractional x.
+const lerp = (v, x) => { const a = Math.min(Math.abs(x), R - 1e-6), k = Math.floor(a); return v[k] + (v[k + 1] - v[k]) * (a - k); };
+const yAt = (y, x) => { x = Math.max(-R + 1e-6, Math.min(R - 1e-6, x)); const k = Math.floor(x); return y[k] + (y[k + 1] - y[k]) * (x - k); };
+
 let lastY = { 0: 0, 1: 0, '-1': 0 };
+let dragT = 0;                               // drag progress in quote places: +1 = centre moved up one place
 function layout(quiet) {
   const H = stage.clientHeight, gap = Math.max(18, H * .05);
   // apparent centre Y of each offset, built outward from the centre quote
@@ -280,15 +285,21 @@ function layout(quiet) {
     }
   }
   lastY = y;
+  // While dragging, every slot sits at x = o + dragT: the centre quote travels with the
+  // finger and each neighbour moves on toward the place of the one next to it. Values in
+  // between are interpolated, so the drum is continuous. At rest dragT = 0 and x = o.
+  const Z = LOOK.map(L => L.z), ROT = LOOK.map(L => L.rot), A = LOOK.map(L => L.a);
+  const OP = LOOK.map(L => L.op), BL = LOOK.map(L => L.blur);
+  if (narrow.matches) A[1] = .55;             // bigger neighbours on phones
   for (let o = -R; o <= R; o++) {
-    const el = slotAt(pos + o), L = LOOK[Math.abs(o)], f = (P - L.z) / P;
-    const a = narrow.matches && Math.abs(o) === 1 ? .55 : L.a;   // bigger neighbours on phones
+    const el = slotAt(pos + o), x = o + dragT;
+    const z = lerp(Z, x), f = (P - z) / P, bl = lerp(BL, x);
     el.dataset.o = o;
+    // logical offset +1 (the next quote) is drawn ABOVE the centre; the px are corrected for perspective
     el.style.transform =
-      // logical offset +1 (the next quote) is drawn ABOVE the centre: forward = everything moves top to bottom
-      `translate3d(0, calc(-50% + ${((-y[o] + dragPx) * f).toFixed(1)}px), ${L.z}px) rotateX(${Math.sign(o) * L.rot}deg) scale(${(a * f).toFixed(4)})`;
-    el.style.setProperty('--op', L.op);
-    el.style.filter = L.blur && !reduced.matches ? `blur(${L.blur}px)` : 'none';
+      `translate3d(0, calc(-50% + ${(-yAt(y, x) * f).toFixed(1)}px), ${z.toFixed(1)}px) rotateX(${Math.sign(x) * lerp(ROT, x)}deg) scale(${(lerp(A, x) * f).toFixed(4)})`;
+    el.style.setProperty('--op', lerp(OP, x));
+    el.style.filter = bl > .05 && !reduced.matches ? `blur(${bl.toFixed(2)}px)` : 'none';
     el.setAttribute('aria-hidden', o !== 0);
     el.style.pointerEvents = Math.abs(o) <= 1 ? 'auto' : 'none';
   }
@@ -364,7 +375,7 @@ stage.addEventListener('wheel', e => {
 // Drag / swipe: the quotes follow the finger 1:1 in the same direction. Past the
 // neighbour's place they resist. On release they either settle back, or glide on
 // to the neighbour from exactly where the finger let go, in one movement.
-let startY = 0, dragY = 0, dragPx = 0, dragging = false, dragMoved = false, movingT = 0;
+let startY = 0, dragY = 0, dragging = false, dragMoved = false, movingT = 0;
 stage.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
   clearTimeout(movingT);
@@ -378,12 +389,13 @@ addEventListener('pointermove', e => {
   if (e.pointerType === 'mouse' && e.buttons === 0) return endDrag();
   dragY = e.clientY - startY;
   if (Math.abs(dragY) > 6) dragMoved = true;
-  // the quotes follow the finger: finger up -> quotes move up, the quote below rises in.
-  // They can travel exactly as far as that neighbour's place, and resist beyond that.
-  const dir = Math.sign(dragY), reach = Math.abs(lastY[dir]);
-  const pull = Math.abs(dragY), amount = pull < reach ? pull : reach + (pull - reach) * .2;
-  dragPx = dir * Math.min(amount, reach * 1.1);
-  stage.classList.toggle('moving', Math.abs(dragPx) > 12);
+  // finger up -> the centre quote moves up one place and the quote below rises into the centre.
+  // One place = the distance to that neighbour; beyond it the drag resists.
+  // reach = how far the centre quote travels to its neighbour's place, so it follows the finger 1:1
+  const reach = Math.abs(lastY[-Math.sign(dragY)]);
+  const raw = Math.abs(dragY) / reach, amount = Math.min(raw < 1 ? raw : 1 + (raw - 1) * .2, 1.1);
+  dragT = -Math.sign(dragY) * amount;
+  stage.classList.toggle('moving', amount * reach > 12);
   layout(true);
 });
 addEventListener('pointerup', endDrag);
@@ -394,7 +406,7 @@ function endDrag() {
   dragging = false;
   stage.offsetWidth;                           // apply the last finger position before transitions come back on
   stage.classList.remove('dragging');
-  dragPx = 0;
+  dragT = 0;
   const H = stage.clientHeight;
   if (Math.abs(dragY) > Math.min(60, H * .08)) {
     // finger up = the quote below rises into the centre; finger down = the one above drops in
