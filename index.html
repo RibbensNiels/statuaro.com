@@ -289,12 +289,13 @@ function layout(quiet) {
   if (narrow.matches) A[1] = .55;             // bigger neighbours on phones
   for (let o = -R; o <= R; o++) {
     const el = slotAt(pos + o), x = o + dragT;
-    const z = lerp(Z, x), f = (P - z) / P, bl = lerp(BL, x);
+    // the blur and text fade belong to the quote's own place (offset o), so a quote keeps its look while it moves
+    const z = lerp(Z, x), f = (P - z) / P, bl = BL[Math.abs(o)];
     el.dataset.o = o;
     // logical offset +1 (the next quote) is drawn ABOVE the centre; the px are corrected for perspective
     el.style.transform =
       `translate3d(0, calc(-50% + ${(-yAt(y, x) * f).toFixed(1)}px), ${z.toFixed(1)}px) rotateX(${Math.sign(x) * lerp(ROT, x)}deg) scale(${(lerp(A, x) * f).toFixed(4)})`;
-    el.style.setProperty('--op', lerp(OP, x));
+    el.style.setProperty('--op', OP[Math.abs(o)]);
     el.style.filter = bl > .05 && !reduced.matches ? `blur(${bl.toFixed(2)}px)` : 'none';
     el.setAttribute('aria-hidden', o !== 0);
     el.style.pointerEvents = Math.abs(o) <= 1 ? 'auto' : 'none';
