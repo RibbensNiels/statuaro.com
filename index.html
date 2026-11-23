@@ -73,10 +73,9 @@
      a stronger blur faded in a bit further from the quote. */
   /* the blur veils step aside while the quotes move: their backdrop-filter would
      otherwise draw the moving quote mirrored */
-  .veil { transition: opacity .35s ease; }
-  .stage.moving .veil { opacity: 0; }
   .veil { position: absolute; left: 0; right: 0; pointer-events: none; z-index: 2;
-          transition: height var(--fade) var(--soft); }
+          transition: height var(--fade) var(--soft), opacity var(--dur) var(--glide); }   /* back in over the length of the glide */
+  .stage.moving .veil { opacity: 0; transition-duration: .12s; }                         /* out fast when a drag starts */
   .veil.top { top: 0; height: var(--veil-top, 30%); }
   .veil.bot { bottom: 0; height: var(--veil-bot, 30%); }
   .veil i { position: absolute; inset: 0; }
