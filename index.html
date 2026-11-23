@@ -375,10 +375,9 @@ stage.addEventListener('wheel', e => {
 // Drag / swipe: the quotes follow the finger 1:1 in the same direction. Past the
 // neighbour's place they resist. On release they either settle back, or glide on
 // to the neighbour from exactly where the finger let go, in one movement.
-let startY = 0, dragY = 0, dragging = false, dragMoved = false, movingT = 0;
+let startY = 0, dragY = 0, dragging = false, dragMoved = false;
 stage.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
-  clearTimeout(movingT);
   dragging = true; dragMoved = false; startY = e.clientY; dragY = 0;
   stage.classList.add('dragging');
 });
@@ -414,9 +413,7 @@ function endDrag() {
   } else {
     layout(true);                              // not far enough: glide back to rest
   }
-  stage.classList.add('moving');                // veils stay away until the quote has settled
-  clearTimeout(movingT);
-  movingT = setTimeout(() => stage.classList.remove('moving'), 1400);
+  stage.classList.remove('moving');            // veils fade back in during the glide, not after it
   setTimeout(() => { dragMoved = false; }, 0);
 }
 
