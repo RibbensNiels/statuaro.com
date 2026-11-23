@@ -51,6 +51,7 @@
   }
   .track { position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none; transition: transform .5s var(--ease-out); }
   .track.dragging { transition: none; }
+  .stage.dragging .slot { transition: none; }   /* the quotes follow the finger 1:1 */
 
   .slot {
     position: absolute; top: 50%; left: var(--pad); right: var(--pad);
@@ -70,6 +71,10 @@
   /* Progressive blur: two veils that start right at the top and bottom edge of the
      centre quote and blur harder the further out you go. Four stacked layers, each
      a stronger blur faded in a bit further from the quote. */
+  /* the blur veils step aside while the quotes move: their backdrop-filter would
+     otherwise draw the moving quote mirrored */
+  .veil { transition: opacity .35s ease; }
+  .stage.moving .veil { opacity: 0; }
   .veil { position: absolute; left: 0; right: 0; pointer-events: none; z-index: 2;
           transition: height var(--fade) var(--soft); }
   .veil.top { top: 0; height: var(--veil-top, 30%); }
@@ -261,7 +266,8 @@ const P = 900;
 const narrow = matchMedia('(max-width: 40rem)');
 const cos = d => Math.cos(d * Math.PI / 180);
 
-function layout() {
+let lastY = { 0: 0, 1: 0, '-1': 0 };
+function layout(quiet) {
   const H = stage.clientHeight, gap = Math.max(18, H * .05);
   // apparent centre Y of each offset, built outward from the centre quote
   const y = { 0: 0 };
@@ -273,13 +279,14 @@ function layout() {
       edge += gap + h;
     }
   }
+  lastY = y;
   for (let o = -R; o <= R; o++) {
     const el = slotAt(pos + o), L = LOOK[Math.abs(o)], f = (P - L.z) / P;
     const a = narrow.matches && Math.abs(o) === 1 ? .55 : L.a;   // bigger neighbours on phones
     el.dataset.o = o;
     el.style.transform =
       // logical offset +1 (the next quote) is drawn ABOVE the centre: forward = everything moves top to bottom
-      `translate3d(0, calc(-50% + ${(-y[o] * f).toFixed(1)}px), ${L.z}px) rotateX(${Math.sign(o) * L.rot}deg) scale(${(a * f).toFixed(4)})`;
+      `translate3d(0, calc(-50% + ${((-y[o] + dragPx) * f).toFixed(1)}px), ${L.z}px) rotateX(${Math.sign(o) * L.rot}deg) scale(${(a * f).toFixed(4)})`;
     el.style.setProperty('--op', L.op);
     el.style.filter = L.blur && !reduced.matches ? `blur(${L.blur}px)` : 'none';
     el.setAttribute('aria-hidden', o !== 0);
@@ -289,6 +296,7 @@ function layout() {
   const edge = Math.max(0, H / 2 - slotAt(pos)._h / 2 - 6);
   stage.style.setProperty('--veil-top', edge + 'px');
   stage.style.setProperty('--veil-bot', edge + 'px');
+  if (quiet) return;                          // while dragging: no text or URL updates
   const cur = quoteAt(pos);
   countEl.textContent = `No. ${(cur + 1).toLocaleString('en')}`;
   try { history.replaceState(null, '', '#' + (cur + 1)); } catch {}
@@ -353,34 +361,50 @@ stage.addEventListener('wheel', e => {
   if (Math.abs(wheelSum) > 40) { go(Math.sign(wheelSum)); wheelSum = 0; wheelLock = now + 600; }
 }, { passive: false });
 
-// Drag / swipe: the whole drum follows the finger, then settles on release.
-let startY = 0, dragY = 0, dragging = false, dragMoved = false;
+// Drag / swipe: the quotes follow the finger 1:1 in the same direction. Past the
+// neighbour's place they resist. On release they either settle back, or glide on
+// to the neighbour from exactly where the finger let go, in one movement.
+let startY = 0, dragY = 0, dragPx = 0, dragging = false, dragMoved = false, movingT = 0;
 stage.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
+  clearTimeout(movingT);
   dragging = true; dragMoved = false; startY = e.clientY; dragY = 0;
-  track.classList.add('dragging');
+  stage.classList.add('dragging');
 });
 addEventListener('pointermove', e => {
   if (!dragging) return;
+  // the button is already up but the release never reached the page (e.g. it was
+  // let go over the taskbar): settle now instead of following the mouse
+  if (e.pointerType === 'mouse' && e.buttons === 0) return endDrag();
   dragY = e.clientY - startY;
   if (Math.abs(dragY) > 6) dragMoved = true;
-  // rubber band: follows 1:1 at first, then resists
-  const d = Math.sign(dragY) * Math.min(Math.abs(dragY), 40 + Math.abs(dragY) * .35);
-  track.style.transform = `translateY(${d}px)`;
+  // the quotes follow the finger: finger up -> quotes move up, the quote below rises in.
+  // They can travel exactly as far as that neighbour's place, and resist beyond that.
+  const dir = Math.sign(dragY), reach = Math.abs(lastY[dir]);
+  const pull = Math.abs(dragY), amount = pull < reach ? pull : reach + (pull - reach) * .2;
+  dragPx = dir * Math.min(amount, reach * 1.1);
+  stage.classList.toggle('moving', Math.abs(dragPx) > 12);
+  layout(true);
 });
 addEventListener('pointerup', endDrag);
 addEventListener('pointercancel', endDrag);
+addEventListener('blur', endDrag);          // window lost focus mid-drag
 function endDrag() {
   if (!dragging) return;
   dragging = false;
-  track.classList.remove('dragging');
-  track.style.transform = '';
+  stage.offsetWidth;                           // apply the last finger position before transitions come back on
+  stage.classList.remove('dragging');
+  dragPx = 0;
   const H = stage.clientHeight;
   if (Math.abs(dragY) > Math.min(60, H * .08)) {
-    // drag down = the next quote (above) comes down into the centre
-    const steps = Math.max(1, Math.min(3, Math.round(Math.abs(dragY) / (H * .25))));
-    go(dragY > 0 ? steps : -steps);
+    // finger up = the quote below rises into the centre; finger down = the one above drops in
+    go(dragY < 0 ? -1 : 1);
+  } else {
+    layout(true);                              // not far enough: glide back to rest
   }
+  stage.classList.add('moving');                // veils stay away until the quote has settled
+  clearTimeout(movingT);
+  movingT = setTimeout(() => stage.classList.remove('moving'), 1400);
   setTimeout(() => { dragMoved = false; }, 0);
 }
 
