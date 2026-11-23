@@ -34,7 +34,10 @@
   /* Wordmark: bold Helvetica */
   .mark { font-family: var(--font); font-weight: 700; font-size: 1.375rem; letter-spacing: -.035em; line-height: 1.15; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 var(--pad); height: 3.75rem; border-bottom: 1px solid var(--ink); }
-  #count { font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+  #count { display: inline-block; font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+  /* the number rolls in from the side the quotes come from */
+  #count.roll { animation: roll .5s var(--glide); }
+  @keyframes roll { from { transform: translateY(var(--from, .6em)); opacity: 0; } to { transform: none; opacity: 1; } }
 
   /* ── The drum ─────────────────────────────────────────────
      Every slot sits on the vertical centre line of the stage. JS gives each one
@@ -136,6 +139,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     :root { --dur: .3s; }
+    #count.roll { animation: none; }
   }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
@@ -267,6 +271,7 @@ const lerp = (v, x) => { const a = Math.min(Math.abs(x), R - 1e-6), k = Math.flo
 const yAt = (y, x) => { x = Math.max(-R + 1e-6, Math.min(R - 1e-6, x)); const k = Math.floor(x); return y[k] + (y[k + 1] - y[k]) * (x - k); };
 
 let lastY = { 0: 0, 1: 0, '-1': 0 };
+let countDir = 1;                            // direction of the last move, for the counter's roll-in
 let dragT = 0;                               // drag progress in quote places: +1 = centre moved up one place
 function layout(quiet) {
   const H = stage.clientHeight, gap = Math.max(18, H * .05);
@@ -305,8 +310,12 @@ function layout(quiet) {
   stage.style.setProperty('--veil-top', edge + 'px');
   stage.style.setProperty('--veil-bot', edge + 'px');
   if (quiet) return;                          // while dragging: no text or URL updates
-  const cur = quoteAt(pos);
-  countEl.textContent = `No. ${(cur + 1).toLocaleString('en')}`;
+  const cur = quoteAt(pos), txt = `No. ${(cur + 1).toLocaleString('en')}`;
+  if (countEl.textContent !== txt) {
+    countEl.textContent = txt;
+    countEl.style.setProperty('--from', countDir > 0 ? '-.6em' : '.6em');
+    countEl.classList.remove('roll'); void countEl.offsetWidth; countEl.classList.add('roll');
+  }
   try { history.replaceState(null, '', '#' + (cur + 1)); } catch {}
 }
 
@@ -324,6 +333,7 @@ function sync() {
 function go(step) {
   if (!step) return;
   pos += step;
+  countDir = Math.sign(step);
   const fresh = sync();
   if (fresh.length) {
     // place new slots at their far-off start position first, then animate everything
