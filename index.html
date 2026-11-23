@@ -71,11 +71,8 @@
   /* Progressive blur: two veils that start right at the top and bottom edge of the
      centre quote and blur harder the further out you go. Four stacked layers, each
      a stronger blur faded in a bit further from the quote. */
-  /* the blur veils step aside while the quotes move: their backdrop-filter would
-     otherwise draw the moving quote mirrored */
   .veil { position: absolute; left: 0; right: 0; pointer-events: none; z-index: 2;
-          transition: height var(--fade) var(--soft), opacity var(--dur) var(--glide); }   /* back in over the length of the glide */
-  .stage.moving .veil { opacity: 0; transition-duration: .12s; }                         /* out fast when a drag starts */
+          transition: height var(--fade) var(--soft); }
   .veil.top { top: 0; height: var(--veil-top, 30%); }
   .veil.bot { bottom: 0; height: var(--veil-bot, 30%); }
   .veil i { position: absolute; inset: 0; }
@@ -393,7 +390,6 @@ addEventListener('pointermove', e => {
   const reach = Math.abs(lastY[-Math.sign(dragY)]);
   const raw = Math.abs(dragY) / reach, amount = Math.min(raw < 1 ? raw : 1 + (raw - 1) * .2, 1.1);
   dragT = -Math.sign(dragY) * amount;
-  stage.classList.toggle('moving', amount * reach > 12);
   layout(true);
 });
 addEventListener('pointerup', endDrag);
@@ -412,7 +408,6 @@ function endDrag() {
   } else {
     layout(true);                              // not far enough: glide back to rest
   }
-  stage.classList.remove('moving');            // veils fade back in during the glide, not after it
   setTimeout(() => { dragMoved = false; }, 0);
 }
 
