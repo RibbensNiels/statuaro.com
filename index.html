@@ -155,6 +155,34 @@
   .about-close:hover, .about-close:focus-visible { background: var(--ink); color: var(--paper); outline: none; }
   .about-x { position: absolute; top: .75rem; right: .75rem; width: 2.75rem; height: 2.75rem; font: inherit; font-size: 1.75rem; line-height: 1; color: var(--ink); background: none; border: 0; cursor: pointer; }
   .about-x:focus-visible { outline: 2px solid var(--ink); }
+  .about-grip { display: none; }
+
+  /* Open/close motion. The closed state's transition is the exit (shorter than the enter);
+     allow-discrete keeps the dialog in the top layer until the exit has finished. */
+  .about { overscroll-behavior: contain; opacity: 0; transform: scale(.96) translateY(-.5rem); transform-origin: top right;
+    transition: opacity .15s ease-in, transform .15s ease-in, overlay .15s allow-discrete, display .15s allow-discrete; }
+  .about[open] { opacity: 1; transform: none; transition-duration: .22s; transition-timing-function: var(--ease-out); }
+  @starting-style { .about[open] { opacity: 0; transform: scale(.96) translateY(-.5rem); } }
+  .about::backdrop { opacity: 0; transition: opacity .15s, overlay .15s allow-discrete, display .15s allow-discrete; }
+  .about[open]::backdrop { opacity: 1; transition-duration: .22s; }
+  @starting-style { .about[open]::backdrop { opacity: 0; } }
+
+  /* Phone: bottom sheet, full width, slides up, swipe down to close */
+  @media (max-width: 40rem) {
+    .about { margin: auto 0 0; width: 100%; max-width: 100%; max-height: 90dvh; border: 0; border-top: 1px solid var(--ink);
+      padding: 1.75rem 1.5rem calc(1.75rem + env(safe-area-inset-bottom));
+      opacity: 1; transform: translateY(100%); transition-duration: .2s; }
+    .about[open] { transform: none; transition-duration: .34s; }
+    @starting-style { .about[open] { opacity: 1; transform: translateY(100%); } }
+    .about-grip { display: block; width: 2.75rem; height: 4px; margin: -.75rem auto 1.25rem; background: var(--soft-grey); }
+    .about-x { top: .5rem; right: .5rem; }
+    .about-close { width: 100%; padding: 1rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {   /* fade only, no sliding or zooming */
+    .about { opacity: 0; transform: none; }
+    .about[open] { opacity: 1; transform: none; }
+    @starting-style { .about[open] { opacity: 0; transform: none; } }
+  }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
 </head>
@@ -165,6 +193,7 @@
   </header>
 
   <dialog class="about" id="about" aria-labelledby="aboutTitle">
+    <span class="about-grip" aria-hidden="true"></span>
     <button class="about-x" type="button" aria-label="Close" onclick="this.closest('dialog').close()">×</button>
     <h2 id="aboutTitle">Why this exists</h2>
     <p>There are nights when my mind wanders further than I'd like it to. To worries about school and the future, to heartbreak, to things I wish I'd done differently, and to words I said years ago that somehow still stay with me. On nights like that I started reading books, and I kept finding sentences I didn't want to forget. Some quotes came from those books, some from everywhere else. They didn't give me answers, and I didn't ask them to. They just somehow made me calmer.</p>
@@ -392,6 +421,32 @@ about.addEventListener('click', e => {   // click outside the box closes it (pad
   const r = about.getBoundingClientRect();
   if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) about.close();
 });
+
+// Phone sheet: swipe down to close. Only starts when the text is scrolled to the top,
+// so a downward swipe further in still scrolls the text back up.
+const isSheet = matchMedia('(max-width: 40rem)');
+let sy = null, sdy = 0, st = 0, sdrag = false;
+about.addEventListener('touchstart', e => {
+  sy = isSheet.matches && about.scrollTop <= 0 ? e.touches[0].clientY : null;
+  sdy = 0; st = performance.now(); sdrag = false;
+}, { passive: true });
+about.addEventListener('touchmove', e => {
+  if (sy === null) return;
+  sdy = e.touches[0].clientY - sy;
+  if (!sdrag && sdy <= 0) { sy = null; return; }   // swiping up: normal scrolling
+  e.preventDefault();
+  sdrag = true;
+  about.style.transition = 'none';
+  about.style.transform = `translateY(${Math.max(0, sdy)}px)`;   // follows the finger 1:1
+}, { passive: false });
+about.addEventListener('touchend', () => {
+  if (!sdrag) return;
+  const fast = sdy / (performance.now() - st) > 0.5;   // a quick flick also closes
+  about.style.transition = about.style.transform = '';   // CSS animates from here: back up, or out
+  if (sdy > about.offsetHeight * 0.25 || (fast && sdy > 40)) about.close();
+  sy = null; sdrag = false;
+});
+about.addEventListener('touchcancel', () => { about.style.transition = about.style.transform = ''; sy = null; sdrag = false; });
 
 addEventListener('keydown', e => {
   if (about.open) return;   // keys scroll the note, not the quotes
