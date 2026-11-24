@@ -141,14 +141,39 @@
     :root { --dur: .3s; }
     #count.roll { animation: none; }
   }
+  /* About: small header button that opens the note */
+  .hr { display: flex; align-items: center; gap: 1.25rem; }
+  .about-btn { font: inherit; font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--grey); background: none; border: 0; padding: .5rem 0; cursor: pointer; }
+  .about-btn:hover, .about-btn:focus-visible { color: var(--ink); text-decoration: underline; text-underline-offset: .3em; outline: none; }
+  .about { margin: auto; width: min(36rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); overflow-y: auto; padding: clamp(1.75rem, 5vw, 3rem); background: var(--paper); color: var(--ink); border: 1px solid var(--ink); font-family: var(--font); }
+  .about::backdrop { background: color-mix(in srgb, var(--paper) 70%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  .about h2 { font-size: 1.375rem; font-weight: 700; letter-spacing: -.035em; margin-bottom: 1.25rem; padding-right: 2rem; }
+  .about p { font-size: 1rem; line-height: 1.6; }
+  .about p + p { margin-top: 1em; }
+  .about p:last-of-type { color: var(--grey); }
+  .about-close { display: block; margin-top: 1.75rem; font: inherit; font-size: .8125rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink); background: none; border: 1px solid var(--ink); padding: .8rem 1.5rem; cursor: pointer; }
+  .about-close:hover, .about-close:focus-visible { background: var(--ink); color: var(--paper); outline: none; }
+  .about-x { position: absolute; top: .75rem; right: .75rem; width: 2.75rem; height: 2.75rem; font: inherit; font-size: 1.75rem; line-height: 1; color: var(--ink); background: none; border: 0; cursor: pointer; }
+  .about-x:focus-visible { outline: 2px solid var(--ink); }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
 </head>
 <body>
   <header>
     <span class="mark">Ribbens</span>
-    <span id="count"></span>
+    <span class="hr"><span id="count"></span><button class="about-btn" id="aboutBtn" type="button" aria-haspopup="dialog">About</button></span>
   </header>
+
+  <dialog class="about" id="about" aria-labelledby="aboutTitle">
+    <button class="about-x" type="button" aria-label="Close" onclick="this.closest('dialog').close()">×</button>
+    <h2 id="aboutTitle">Why this exists</h2>
+    <p>There are nights when my mind wanders further than I'd like it to. To worries about school and the future, to heartbreak, to things I wish I'd done differently, and to words I said years ago that somehow still stay with me. On nights like that I started reading books, and I kept finding sentences I didn't want to forget. Some quotes came from those books, some from everywhere else. They didn't give me answers, and I didn't ask them to. They just somehow made me calmer.</p>
+    <p>I started saving them. Some helped me make sense of things I couldn't quite understand. Some just stuck with me, and I couldn't tell you why. Some made me laugh, and some made me sad. I kept them all. Eventually it became this.</p>
+    <p>I want to be clear: I'm not a philosopher or a psychologist, and I'm not pretending to be one. I don't have life figured out. These aren't lessons from me. They're just words from other people that meant something to me at some point.</p>
+    <p>Not every quote here is true, and not every quote is meant for you. Some were said in anger, some as a joke, some to one person in one situation. Read them carefully, and if something feels off, trust that feeling.</p>
+    <p>If you're struggling, please don't rely on a website. Talk to a friend, a family member, or someone who's trained to help :)</p>
+    <button class="about-close" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </dialog>
 
   <main class="stage" id="stage" aria-roledescription="carousel" aria-label="Quotes">
     <div class="track" id="track"></div>
@@ -361,7 +386,15 @@ copyBtn.addEventListener('click', async () => {
   } catch { copyBtn.textContent = 'Failed'; }
 });
 
+const about = document.getElementById('about');
+document.getElementById('aboutBtn').addEventListener('click', () => about.showModal());
+about.addEventListener('click', e => {   // click outside the box closes it (padding clicks also target the dialog, so check the rect)
+  const r = about.getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) about.close();
+});
+
 addEventListener('keydown', e => {
+  if (about.open) return;   // keys scroll the note, not the quotes
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.target.closest('button') && (e.code === 'Space' || e.key === 'Enter')) return;
   if (['ArrowDown', 'ArrowRight', 'PageDown', 'Enter'].includes(e.key) || e.code === 'Space') { e.preventDefault(); go(1); }
