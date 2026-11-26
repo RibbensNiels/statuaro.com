@@ -6,6 +6,7 @@
 <meta name="robots" content="noai, noimageai">
 <meta name="color-scheme" content="light dark">
 <title>Ribbens — Quotes</title>
+<link rel="stylesheet" href="fonts.css">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000'/%3E%3Ctext x='16' y='29' font-family='Helvetica,Arial' font-weight='700' font-size='30' fill='%23fff' text-anchor='middle'%3E%E2%80%9C%3C/text%3E%3C/svg%3E">
 <style>
   :root {
@@ -96,6 +97,7 @@
   .q {
     font-weight: 700; letter-spacing: -.04em; line-height: 1;
     text-wrap: balance;
+    white-space: pre-line;   /* keeps the line breaks inside a quote */
     font-size: calc(var(--k) * var(--u) * var(--fit, 1));
     max-width: var(--ch);
   }
@@ -105,8 +107,16 @@
   .slot[data-size="m"]   { --k: 6.2; --ch: 20ch; }
   .slot[data-size="l"]   { --k: 4.7; --ch: 25ch; }
   .slot[data-size="xl"]  { --k: 3.7; --ch: 30ch; }
-  .slot[data-size="xxl"] { --k: 3.0; --ch: 36ch; }
-  .slot[data-size="l"] .q, .slot[data-size="xl"] .q, .slot[data-size="xxl"] .q { letter-spacing: -.03em; line-height: 1.06; }
+  .slot[data-size="l"] .q, .slot[data-size="xl"] .q { letter-spacing: -.03em; line-height: 1.06; }
+
+  /* Long quotes are set like a page, not a headline: more air, never under 18px.
+     If that still doesn't fit the stage, the text scrolls inside its own box. */
+  .slot[data-size="long"] { --k: 2.5; --ch: 34ch; }
+  .slot[data-size="long"] .q { font-size: max(1.125rem, calc(var(--k) * var(--u) * var(--fit, 1))); letter-spacing: -.02em; line-height: 1.3; text-wrap: pretty; }
+  .q.scroll { overflow: hidden auto; overscroll-behavior: contain; touch-action: pan-y; scrollbar-width: thin;
+    -webkit-mask-image: linear-gradient(transparent, #000 var(--ft, 0px), #000 calc(100% - var(--fb, 0px)), transparent);
+            mask-image: linear-gradient(transparent, #000 var(--ft, 0px), #000 calc(100% - var(--fb, 0px)), transparent); }
+  .q.scroll:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 
   .by { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .6rem; margin-top: clamp(.9rem, 2.2vh, 1.6rem); font-size: .875rem; letter-spacing: .02em; color: var(--grey); }
   .by:empty { display: none; }
@@ -183,6 +193,8 @@
     .about[open] { opacity: 1; transform: none; }
     @starting-style { .about[open] { opacity: 0; transform: none; } }
   }
+  /* Words written as **word** in the list. font-size-adjust matches their x-height to Helvetica. */
+  .q em { font-family: 'Libre Caslon Text', serif; font-style: italic; font-weight: 400; font-size-adjust: ex-height .5; letter-spacing: 0; line-height: 0; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>
 </head>
@@ -254,20 +266,36 @@ const slots = Array.from({ length: SLOTS }, () => {
   el.addEventListener('click', () => {
     if (dragMoved) return;
     const o = +el.dataset.o;
-    if (o === 0) { if (!getSelection().toString()) go(1); } else go(o);   // centre click: next quote, the whole drum rolls one position down
+    // centre click: next quote, the whole drum rolls one position down (not while reading a scrolling one)
+    if (o === 0) { if (!getSelection().toString() && !el.querySelector('.q.scroll')) go(1); } else go(o);
   });
+  el.querySelector('.q').addEventListener('scroll', e => fades(e.target), { passive: true });
   track.append(el);
   return el;
 });
 const slotAt = p => slots[mod(p, SLOTS)];
 
+// Can this text box still scroll that way? (+1 = down)
+const canScroll = (q, dir) => dir > 0 ? q.scrollTop + q.clientHeight < q.scrollHeight - 1 : q.scrollTop > 0;
+// The centre quote's text box, if it scrolls and has more in that direction.
+const scrollable = dir => { const q = slotAt(pos).querySelector('.q.scroll'); return q && canScroll(q, dir) ? q : null; };
+// Soft edge only on the side where there is more to read.
+function fades(q) {
+  q.style.setProperty('--ft', canScroll(q, -1) ? '2em' : '0px');
+  q.style.setProperty('--fb', canScroll(q, 1) ? '2em' : '0px');
+}
+
 function authorParts(a) { const m = a.match(/^(.*?)\s*\(([^)]*)\)$/); return m ? [m[1], m[2]] : [a, '']; }
 
+// **marked** words: split() puts them at the odd positions; a lone ** stays as typed.
+const MARK = /\*\*([\s\S]+?)\*\*/;
+const plain = t => t.split(MARK).join('');
+
 function fill(el, i) {
-  const text = QUOTES[i], n = text.length;
+  const text = QUOTES[i], n = plain(text).length;
   el.dataset.idx = i;
-  el.dataset.size = n <= 40 ? 's' : n <= 85 ? 'm' : n <= 140 ? 'l' : n <= 220 ? 'xl' : 'xxl';
-  el.querySelector('.q').textContent = text;
+  el.dataset.size = n <= 40 ? 's' : n <= 85 ? 'm' : n <= 140 ? 'l' : n <= 220 ? 'xl' : 'long';
+  el.querySelector('.q').replaceChildren(...text.split(MARK).map((t, k) => { if (k % 2 === 0) return t; const em = document.createElement('em'); em.textContent = t; return em; }));
   const by = el.querySelector('.by');
   by.replaceChildren();
   if (AUTHORS[i]) {
@@ -278,18 +306,24 @@ function fill(el, i) {
   fit(el);
 }
 
-// Never let the centre quote take more than ~52% of the stage height: long
-// quotes get a smaller font instead of pushing their neighbours off the stage.
+// Normal quotes take at most ~52% of the stage height (smaller font instead of
+// pushing the neighbours off). Long ones may use 72%, and past 76% they scroll.
 function fit(el) {
   const inner = el.querySelector('.in'), saved = el.style.transform;
   el.style.transform = 'none';                // measure untransformed (slot is in .jump, so nothing animates)
   inner.style.width = '';
   el.style.setProperty('--fit', 1);
-  const max = stage.clientHeight * 0.52, h = el.offsetHeight;
-  if (h > max) el.style.setProperty('--fit', Math.max(.55, max / h * .97));
+  const q = el.querySelector('.q'), H = stage.clientHeight;
+  q.classList.remove('scroll'); q.removeAttribute('tabindex'); q.style.maxHeight = '';
+  if (el.dataset.size === 'long') {
+    // step down until it fits; the CSS floor (18px) stops it getting unreadable
+    for (let f = .94; f > .4 && el.offsetHeight > H * .72; f *= .94) el.style.setProperty('--fit', f);
+  } else if (el.offsetHeight > H * .52) {
+    el.style.setProperty('--fit', Math.max(.55, H * .52 / el.offsetHeight * .97));
+  }
   // A single long word ("disappointments.") must never run off the screen: if the
   // text is wider than the slot, shrink it until the longest word fits.
-  const q = el.querySelector('.q'), room = el.clientWidth, x0 = el.getBoundingClientRect().left;
+  const room = el.clientWidth, x0 = el.getBoundingClientRect().left;
   const rg = document.createRange(); rg.selectNodeContents(q);
   let right = 0; for (const b of rg.getClientRects()) right = Math.max(right, b.right - x0);
   if (right > room) el.style.setProperty('--fit', (+el.style.getPropertyValue('--fit') || 1) * room / right * .97);
@@ -301,6 +335,11 @@ function fit(el) {
     // the author line is a full-width flex row, so measure its actual pieces, not the row
     for (const b of el.querySelectorAll('.by > span')) w = Math.max(w, b.getBoundingClientRect().right - left);
     inner.style.width = Math.ceil(w + 1) + 'px';
+  }
+  const over = el.offsetHeight - H * .76;
+  if (over > 0) {
+    q.style.maxHeight = Math.max(60, q.offsetHeight - over) + 'px';
+    q.classList.add('scroll'); q.scrollTop = 0; fades(q);
   }
   el._h = el.offsetHeight;
   el.style.transform = saved;
@@ -351,6 +390,8 @@ function layout(quiet) {
     // all look comes from the screen position x: blur is only the fixed veil layers
     const z = lerp(Z, x), f = (P - z) / P;
     el.dataset.o = o;
+    const box = el.querySelector('.q.scroll');
+    if (box) { box.tabIndex = o ? -1 : 0; if (o) box.scrollTop = 0; }   // neighbours start at the top again
     // logical offset +1 (the next quote) is drawn ABOVE the centre; the px are corrected for perspective
     el.style.transform =
       `translate3d(0, calc(-50% + ${(-yAt(y, x) * f).toFixed(1)}px), ${z.toFixed(1)}px) rotateX(${Math.sign(x) * lerp(ROT, x)}deg) scale(${(lerp(A, x) * f).toFixed(4)})`;
@@ -399,7 +440,7 @@ function go(step) {
   copyBtn.textContent = 'Copy';
   // tell screen readers which quote is now in the centre
   const i = quoteAt(pos), a = AUTHORS[i];
-  sr.textContent = QUOTES[i] + (a ? ' — ' + authorParts(a)[0] : '');
+  sr.textContent = plain(QUOTES[i]) + (a ? ' — ' + authorParts(a)[0] : '');
 }
 
 // ── Input ─────────────────────────────────────────────────
@@ -408,7 +449,7 @@ $('prev').addEventListener('click', () => go(-1));
 copyBtn.addEventListener('click', async () => {
   const i = quoteAt(pos), a = AUTHORS[i];
   try {
-    await navigator.clipboard.writeText(QUOTES[i] + (a ? ' — ' + authorParts(a)[0] : ''));
+    await navigator.clipboard.writeText(plain(QUOTES[i]) + (a ? ' — ' + authorParts(a)[0] : ''));
     copyBtn.textContent = 'Copied';
     sr.textContent = 'Copied to clipboard';
     setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1400);
@@ -452,17 +493,27 @@ addEventListener('keydown', e => {
   if (about.open) return;   // keys scroll the note, not the quotes
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.target.closest('button') && (e.code === 'Space' || e.key === 'Enter')) return;
-  if (['ArrowDown', 'ArrowRight', 'PageDown', 'Enter'].includes(e.key) || e.code === 'Space') { e.preventDefault(); go(1); }
-  else if (['ArrowUp', 'ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); go(-1); }
+  const dir = ['ArrowDown', 'ArrowRight', 'PageDown', 'Enter'].includes(e.key) || e.code === 'Space' ? 1
+            : ['ArrowUp', 'ArrowLeft', 'PageUp'].includes(e.key) ? -1 : 0;
+  if (dir) {
+    e.preventDefault();
+    // up/down/page/space read through a scrolling quote first; left/right/enter always change quote
+    const q = !['ArrowRight', 'ArrowLeft', 'Enter'].includes(e.key) && scrollable(dir);
+    if (q) q.scrollTop += dir * q.clientHeight * (e.key.startsWith('Arrow') ? .25 : .8);
+    else go(dir);
+  }
   else if (e.key === 'c' || e.key === 'C') copyBtn.click();
 });
 
 // Mouse wheel / trackpad: one quote per gesture, not one per wheel event.
-let wheelSum = 0, wheelLock = 0;
+let wheelSum = 0, wheelLock = 0, readAt = -1e9;
 stage.addEventListener('wheel', e => {
   e.preventDefault();
   const now = performance.now();
   if (now < wheelLock) return;
+  const q = scrollable(Math.sign(e.deltaY));
+  if (q) { q.scrollTop += e.deltaY; wheelSum = 0; readAt = now; return; }
+  if (now - readAt < 400) { readAt = now; return; }   // leftover scroll momentum must not flip the quote
   wheelSum += e.deltaY;
   if (Math.abs(wheelSum) > 40) { go(Math.sign(wheelSum)); wheelSum = 0; wheelLock = now + 600; }
 }, { passive: false });
@@ -473,6 +524,8 @@ stage.addEventListener('wheel', e => {
 let startY = 0, dragY = 0, dragging = false, dragMoved = false;
 stage.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
+  // a finger on a scrolling quote scrolls the text, it doesn't drag the drum
+  if (e.pointerType !== 'mouse' && e.target.closest('.slot[data-o="0"] .q.scroll')) return;
   dragging = true; dragMoved = false; startY = e.clientY; dragY = 0;
   stage.classList.add('dragging');
 });
@@ -510,6 +563,21 @@ function endDrag() {
   setTimeout(() => { dragMoved = false; }, 0);
 }
 
+// On a scrolling quote, a swipe that starts at the end (or the top) moves on,
+// in the same direction as a drag anywhere else.
+let swipe = null;
+stage.addEventListener('touchstart', e => {
+  const q = e.touches.length === 1 && e.target.closest('.slot[data-o="0"] .q.scroll');
+  swipe = q ? { y: e.touches[0].clientY, top: !canScroll(q, -1), end: !canScroll(q, 1) } : null;
+}, { passive: true });
+stage.addEventListener('touchend', e => {
+  if (!swipe) return;
+  const d = e.changedTouches[0].clientY - swipe.y;
+  if (d < -60 && swipe.end) go(-1);
+  else if (d > 60 && swipe.top) go(1);
+  swipe = null;
+});
+
 // Re-fit on resize (orientation change, window resize)
 let rT;
 addEventListener('resize', () => {
@@ -523,7 +591,7 @@ addEventListener('resize', () => {
 });
 
 // ── Start ─────────────────────────────────────────────────
-document.fonts.ready.then(() => {
+Promise.all([...document.fonts].map(f => f.load())).finally(() => {   // measure only once the accent font is in
   sync();
   // Entrance: the drum rolls in from one position below.
   pos -= 1; layout(); pos += 1;
